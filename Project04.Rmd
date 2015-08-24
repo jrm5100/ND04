@@ -412,26 +412,24 @@ grid.arrange(p1, p2, ncol=1,
 This plot is divided into two sections based on the date of loan origination because the credit rating system changed in those two time periods.  The older loans are all complete, while the more recent loans on the right also include current loans.  Amongst the different credit ratings (increasing from left to right and top to bottom) the profit fraction for any given loan is smaller, but the number of loans with a loss (negative profit fraction) also decreases.  The profit fraction is the total payments made by the borrower minus any fees paid by the lender.  This very clearly shows the risk-reward relationship.  It's also interesting to see that even loans in default may be profitable overall.
 
 ### Plot Two
-```{r echo=FALSE, Plot_Two}
-ggplot(aes(x=EstimatedEffectiveYield, y=InvestmentSpeed),
-       data=filter(loans, ListingCreationDate >= ymd('2009-07-01')))+
-  geom_point(alpha=1/10)+
-  facet_wrap(~ProsperRating, ncol=3)+
-  scale_y_log10()+
-  geom_smooth(aes(color=Term))+
-  ggtitle('Investment Speed vs Estimated Effective Yield across Prosper Ratings')+
-  xlab('Estimated Effective Yield')+
-  ylab('Investment Speed ($ per hour)')
+```{r echo=FALSE, fig.width=12, fig.height=8, Plot_Two}
+ggplot(aes(x=ListingCreationDate, fill=Term),
+       data=loans)+
+  geom_histogram(binwidth=60*60*24*7)+ #weekly
+  facet_wrap(~ListingCategory, scales='free_y', ncol=6)+
+  ggtitle('Types of Loans')+
+  xlab('Listing Creation Date')+
+  ylab('Number of Loans')
 ```
 
 ### Description Two
-This plot shows the relationship between investment speed (the size of the original loan in dollars divided by the number of hours between listing and origination) and the estimated effective yield, faceted by the Prosper Rating.  Investment speed could be seen as a measurement of lender enthusiasm, although it is possible that other things would affect the time between listing and origination.  The enthusiasm generally seems to increase as the rate increases, but then declines.  This could be because loans with even higher rates have a less acceptable level of risk.  The important result here is that the enthusiasm shows a similar pattern across different Prosper Rating levels even though the estimated yield differs.  For example, a 36-month loan with a 0.1 estimated effective yield and AA rating will be originated as quickly as a similar sized 36-month loan with a .15 yield and C rating.
+This plot shows a concise view of the kinds of loans that are listed on Prosper.  It's important to see that the listing categories and available loan terms have changed over time.  Many of these have only been available recently (starting in 2012).  By far Debt Consolidation is the most popular listing category, and 36-months is the most popular loan term.
 
 ### Plot Three
 ```{r echo=FALSE, Plot_Three}
 ggplot(aes(x=MonthlyLoanPayment, y=ProfitFraction, color=LoanStatus),
        data=filter(loans, LoanStatus %in% c('Chargedoff','Defaulted','Completed')))+
-  geom_point(alpha=1/5)+
+  geom_point(alpha=1/10)+
   facet_wrap(~IncomeRange, ncol=2)+
   ggtitle('Loan Profitability vs Monthly Loan Payment')+
   xlab('Monthly Loan Payment ($)')+
