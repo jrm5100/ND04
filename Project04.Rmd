@@ -8,7 +8,6 @@ Prosper Loan Analysis by John McGuigan
 # Notice that the parameter "echo" was set to FALSE for this code chunk.
 # This prevents the code from displaying in the knitted HTML output.
 # You should set echo=FALSE for all code chunks in your file.
-
 library(ggplot2)
 library(dplyr)
 library(lubridate)
@@ -21,30 +20,6 @@ loans <- read.csv("prosperLoanData.csv")
 ```
 
 ```{r echo=F, Cleaning_Variables}
-#Format Factors
-loans$ListingCategory <- factor(loans$ListingCategory..numeric.,
-                                labels = c("Not Available", "Debt Consolidation", "Home Improvement",
-                                           "Business", "Personal Loan", "Student Use", "Auto",
-                                           "Other", "Baby&Adoption", "Boat", "Cosmetic Procedure",
-                                           "Engagement Ring", "Green Loans", "Household Expenses",
-                                           "Large Purchases", "Medical/Dental", "Motorcycle",
-                                           "RV", "Taxes", "Vacation", "Wedding Loans"))
-loans$CreditGrade <- ordered(loans$CreditGrade,
-                              levels=c("", "NC", "HR", "E", "D", "C", "B","A", "AA"))
-loans$ProsperRating <- factor(loans$ProsperRating..numeric.,
-                              labels=c("HR", "E", "D", "C", "B","A", "AA"),
-                              ordered = T)
-loans <- subset(loans, select = -c(ProsperRating..numeric.,ProsperRating..Alpha.) ) #drop unused columns
-loans$IncomeRange <- ordered(loans$IncomeRange,
-                            levels=c("Not employed", "Not displayed", "$0", "$1-24,999", "$25,000-49,999",
-                                     "$50,000-74,999", "$75,000-99,999", "$100,000+"))
-
-loans$Term <- factor(loans$Term, ordered=T)
-
-loans$LoanStatus <- ordered(loans$LoanStatus,
-                            levels=c("Chargedoff", "Defaulted", "Past Due (>120 days)", "Past Due (91-120 days)",
-                                      "Past Due (61-90 days)", "Past Due (31-60 days)", "Past Due (16-30 days)",
-                                     "Past Due (1-15 days)", "Cancelled", "Current", "FinalPaymentInProgress", "Completed"))
 
 #FixDates- some rounded to minutes and some to days
 loans$ListingCreationDate <- floor_date(ymd_hms(loans$ListingCreationDate), 'minute')
@@ -53,7 +28,44 @@ loans$DateCreditPulled <- floor_date(ymd_hms(loans$DateCreditPulled), 'minute')
 loans$FirstRecordedCreditLine <- floor_date(ymd_hms(loans$FirstRecordedCreditLine), 'day')
 loans$LoanOriginationDate <- floor_date(ymd_hms(loans$LoanOriginationDate), 'day')
 
-#New Variable
+#Combine credit and add a time period variable
+old <- filter(loans, ListingCreationDate < ymd('2009-01-01'))
+old$timeperiod <- "Old"
+old$merged_rating <- as.character(old$CreditGrade)
+
+new <- filter(loans, ListingCreationDate >= ymd('2009-01-01'))
+new$timeperiod <- "New"
+new$merged_rating <- as.character(new$ProsperRating..Alpha.)
+
+loans <- rbind(old, new)
+
+#Format Factors
+loans$timeperiod <- factor(loans$timeperiod)
+loans$merged_rating <- factor(loans$merged_rating, levels=c("", "NC", "HR", "E", "D", "C", "B","A", "AA"), ordered=T)
+loans$CreditGrade <- ordered(loans$CreditGrade,
+                              levels=c("", "NC", "HR", "E", "D", "C", "B","A", "AA"))
+loans$ProsperRating <- factor(loans$ProsperRating..numeric.,
+                              labels=c("HR", "E", "D", "C", "B","A", "AA"),
+                              ordered = T)
+loans$ListingCategory <- factor(loans$ListingCategory..numeric.,
+                                labels = c("Not Available", "Debt Consolidation", "Home Improvement",
+                                           "Business", "Personal Loan", "Student Use", "Auto",
+                                           "Other", "Baby&Adoption", "Boat", "Cosmetic Procedure",
+                                           "Engagement Ring", "Green Loans", "Household Expenses",
+                                           "Large Purchases", "Medical/Dental", "Motorcycle",
+                                           "RV", "Taxes", "Vacation", "Wedding Loans"))
+loans$IncomeRange <- ordered(loans$IncomeRange,
+                            levels=c("Not employed", "Not displayed", "$0", "$1-24,999", "$25,000-49,999",
+                                     "$50,000-74,999", "$75,000-99,999", "$100,000+"))
+loans$Term <- factor(loans$Term, ordered=T)
+loans$LoanStatus <- ordered(loans$LoanStatus,
+                            levels=c("Chargedoff", "Defaulted", "Past Due (>120 days)", "Past Due (91-120 days)",
+                                      "Past Due (61-90 days)", "Past Due (31-60 days)", "Past Due (16-30 days)",
+                                     "Past Due (1-15 days)", "Cancelled", "Current", "FinalPaymentInProgress", "Completed"))
+#drop unused columns
+loans <- subset(loans, select = -c(ProsperRating..numeric.,ProsperRating..Alpha.,ListingCategory..numeric.))
+
+#New Variables
 date_diff <- as.numeric(loans$LoanOriginationDate - loans$ListingCreationDate) #hours
 loans$InvestmentSpeed <- loans$LoanOriginalAmount/date_diff
 loans$Profit <- loans$LP_CustomerPayments-
@@ -62,6 +74,13 @@ loans$Profit <- loans$LP_CustomerPayments-
                 loans$LP_CollectionFees
 loans$ProfitFraction <- loans$Profit/loans$LoanOriginalAmount
 
+#cleanup
+rm(new)
+rm(old)
+rm(date_diff)
+```
+
+```{r}
 #Summary
 summary(loans)
 ```
@@ -71,7 +90,8 @@ summary(loans)
 ```{r echo=F, Univariate_1}
 ggplot(aes(x=ListingCategory), data=loans)+
   geom_histogram(fill='steelblue')+
-  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))+
+  scale_y_log10()
 ```
 
 Most loans are for debt consolidation.  A surprising number have no informative information ("Not Available" or "Other") while the more unusual categories (like "Engagement Rings") are rare.
@@ -112,7 +132,8 @@ These are two highly similar variables but they can't be merged since some were 
 ```{r echo=F, Univariate_5}
 ggplot(aes(x=LoanStatus), data=loans)+
   geom_histogram(fill='steelblue')+
-  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))+
+  scale_y_log10()
 ```
 
 The majority of loans are complete or current (good) but a small portion are charged off, in default, or past due.
@@ -144,7 +165,7 @@ This is another custom variable looking at total lender profit compared to the i
 # Univariate Analysis
 
 ### What is the structure of your dataset?
-After some minor reworking of variables, the dataset consists of 113,937 observations of 84 variables for loans roughly between November 2005 and March 2014.
+After some minor reworking of variables, the dataset consists of 113,937 observations of 85 variables for loans roughly between November 2005 and March 2014.
 
 ### What is/are the main feature(s) of interest in your dataset?
 I'm looking at the data from the perspective of a borrower deciding which loans to invest in.  This means I'd like to use different variables to determine the loan status or profitability (which is the key feature of interest).
@@ -153,11 +174,13 @@ I'm looking at the data from the perspective of a borrower deciding which loans 
 I could try looking at variables describing the loan (amount, term, borrower rate) and the borrower (ratings, credit scores, income) in order to find relationships between those and the final outcome.
 
 ### Did you create any new variables from existing variables in the dataset?
-I created 3 variables:
+I created 5 variables:
 
 * InvestmentSpeed  = Loan amount divided by the difference between the listing date and the loan origination date in hours.
 * Profit = Gross borrower payments minus lender payments (Initial principal amount and servicing/collection fees)
 * ProfitFraction = Profit divided by the original loan amount
+* timeperiod = "Old" for loans listed prior to Jan 2009, "New" otherwise
+* "merged_rating" - combined "CreditGrade" for old loans and "ProsperRating" for new loans
 
 ### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
 
@@ -183,27 +206,31 @@ ggplot(aes(x=Term, y=LoanOriginalAmount, fill=Term),
   geom_boxplot()
 ```
 
-As expected, a larger term is associated with larger loans.
+As expected, a larger term is associated with larger loans (median loan size increases with term length).
 
 ```{r echo=F, Bivariate_3}
 ggplot(aes(x=LoanStatus, y=BorrowerRate),
        data=loans)+
   geom_boxplot()+
   theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+
+with(subset(loans, LoanStatus %in% c('Chargedoff','Completed')), wilcox.test(BorrowerRate~LoanStatus))
 ```
 
-Loans with "good" statuses seem to have slightly lower borrower rates.  Creditworthiness could be a confounding variable- good borrowers get lower rates are less likely to default.
+Loans with "good" statuses seem to have slightly lower borrower rates.  A Mann-Whitney U test certainly indicates that the BorrowerRate distribution is different between Chargedoff loans and Completed loans.  Creditworthiness could be a confounding variable- good borrowers get lower rates are less likely to default.
 
 ```{r echo=F, Bivariate_4}
 ggplot(aes(x=LoanOriginalAmount, fill=LoanStatus),
        data=loans)+
-  geom_histogram(binwidth=500, position='stack')+
+  geom_histogram(binwidth=500, position='fill')+
   scale_x_continuous(breaks=seq(0,max(loans$LoanOriginalAmount)+1000, 1000))+
   scale_y_continuous(breaks=seq(0,15000,1000))+
   theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+
+with(subset(loans, LoanStatus %in% c('Chargedoff', 'Defaulted')), wilcox.test(loans$LoanOriginalAmount, LoanOriginalAmount))
 ```
 
-It seems like there may be a slight tendency for small loans to be more likely to go bad (default/chargedoff).  It also looks like the minimum loan amount might have been raised (there are no current loans between $1000 and $2000).
+It seems like there may be a slight tendency for small loans to be more likely to go bad (default/chargedoff).  A A Mann-Whitney U test indicates that the distribution of original loan amount values isn't likely to be the same for defaulted or chargedoff loans and the entire dataset.  It also looks like the minimum loan amount might have been raised (there are no current loans between $1000 and $2000).
 
 ```{r echo=F, Bivariate_5}
 ggplot(aes(x=LoanStatus, fill=LoanStatus),
@@ -226,17 +253,10 @@ To confirm the previous observation, I plotted the date listings were created fa
 
 
 ```{r echo=F, Bivariate_7}
-#Before 2009
-p1 <- ggplot(aes(x=CreditGrade, fill=LoanStatus),
-             data=filter(loans, ListingCreationDate < ymd('2009-01-01')))+
-  geom_histogram(position='stack')
-
-#After July 2009
-p2 <- ggplot(aes(x=ProsperRating, fill=LoanStatus),
-             data=filter(loans, ListingCreationDate >= ymd('2009-07-01')))+
-  geom_histogram(position='stack')
-
-grid.arrange(p1, p2, ncol=1)
+ggplot(aes(x=merged_rating, fill=LoanStatus),
+             data=loans)+
+  geom_histogram(position='fill')+
+  facet_wrap(~timeperiod, ncol=1)
 ```
 
 The credit rating system was clearly improved after Prosper started back up.  Previously even "AA" ratings had a significant portion of "bad" loans- perhaps 1 in 8 loans are in default or were charged off.  In the newer rating system very few loans with that rating have that status (although most are still current and may end up in default or charged off).
@@ -246,9 +266,11 @@ ggplot(aes(x=EstimatedReturn, fill=LoanStatus),
        data=filter(loans, ListingCreationDate >= ymd('2009-07-01')))+
   geom_histogram(binwidth=0.01)+
   scale_x_continuous(breaks=seq(-0.25, 0.25, 0.05))
+
+with(subset(loans, LoanStatus %in% c('Chargedoff','Completed')), wilcox.test(EstimatedReturn~LoanStatus))
 ```
 
-There certainly seems to be a strong relationship between status and estimated return.  Higher estimated return loans have higher rates of bad loan statuses (larger reward for riskier loans).
+There certainly seems to be a strong relationship between status and estimated return.  It's extremely unlikely (p < 2.2e-16) that charged off loans and completed loans have the same distribution of estimated return values.  Higher estimated return loans have higher rates of bad loan statuses (larger reward for riskier loans).
 
 ```{r echo=F, Bivariate_9}
 ggplot(aes(x=BorrowerRate, y=EstimatedReturn),
@@ -271,7 +293,8 @@ Obviously a large number of the most recent loans are current (since they haven'
 ```{r echo=F, Bivariate_11}
 ggplot(aes(x=ProfitFraction, fill=LoanStatus),
        data=loans)+
-  geom_histogram(binwidth=0.01)
+  geom_histogram(binwidth=0.01)+
+  scale_y_continuous(breaks=seq(0,2000,500), limits=c(0,2000))
 ```
 
 As expected, the profitable loans are mostly those that have been completed, since the initial principle must be paid off before a profit is seen.  However, even charged off loans may be profitable.
@@ -296,7 +319,7 @@ I think the estimated return and loan status relationship was the strongest one 
 ggplot(aes(x=InvestmentSpeed, y=EstimatedEffectiveYield),
        data=filter(loans, ListingCreationDate >= ymd('2009-07-01')))+
   geom_point(alpha=1/25)+
-  facet_wrap(~ProsperRating, ncol=1)+
+  facet_wrap(~ProsperRating, ncol=3)+
   scale_x_log10()
 ```
 
@@ -306,39 +329,35 @@ It seems that loans with higher ratings are invested in much more quickly, but a
 ggplot(aes(x=InvestmentSpeed, y=ProfitFraction),
        data=filter(loans, LoanStatus %in% c('Chargedoff','Defaulted','Completed')))+
   geom_point(alpha=1/25)+
-  facet_wrap(~ProsperRating, ncol=1)+
+  facet_wrap(~ProsperRating, ncol=3)+
   scale_x_log10()
+
+with(filter(loans, LoanStatus %in% c('Chargedoff','Defaulted','Completed')), cor.test(ProfitFraction, InvestmentSpeed))
 ```
 
-However, investment speed doesn't show a clear relationship with final profitability (after the loan closes).
+However, investment speed doesn't show a clear relationship (correlation=-0.043) with final profitability (after the loan closes).
 
 ```{r echo=FALSE, Multivariate_3}
 #Before 2009
-p1 <- ggplot(aes(x=ProfitFraction, fill=LoanStatus),
-             data=filter(loans, ListingCreationDate < ymd('2009-01-01')))+
+ggplot(aes(x=ProfitFraction, fill=LoanStatus),
+             data=loans)+
   geom_histogram(position='stack', binwidth=0.01)+
-  facet_wrap(~CreditGrade, scales='free_y')
-
-#After July 2009
-p2 <- ggplot(aes(x=ProfitFraction, fill=LoanStatus),
-             data=filter(loans, ListingCreationDate >= ymd('2009-07-01')))+
-  geom_histogram(position='stack', binwidth=0.01)+
-  facet_wrap(~ProsperRating, scales='free_y')
-
-grid.arrange(p1, p2, ncol=1)
+  facet_wrap(~merged_rating, scales='free_y')
 ```
 
-These two sets of graphs show the relationship between profit fraction, credit rating, and current status.  Higher credit rations (original or new ProsperRating) have a lower profit fraction among completed loans, but fewer loans are completed with a negative profit fraction.
+This graph shows the relationship between profit fraction, credit rating, and current status.  Higher credit rations (original or new ProsperRating) have a lower profit fraction among completed loans, but fewer loans are completed with a negative profit fraction.
 
 ```{r echo=F, Multivariate_4}
-ggplot(aes(x=LoanStatus, y=BorrowerRate),
+ggplot(aes(x=ProsperRating, y=BorrowerRate, color=LoanStatus),
        data=filter(loans, LoanStatus %in% c('Chargedoff','Defaulted','Completed')))+
-  geom_boxplot()+
-  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))+
-  facet_wrap(~ProsperRating, scales='free_y')
+  geom_boxplot(position='dodge')+
+  theme(axis.text.x=element_text(angle=90,hjust=1,vjust=0.5))
+
+with(filter(loans, LoanStatus %in% c('Chargedoff','Defaulted','Completed')), kruskal.test(BorrowerRate~ProsperRating))
+with(filter(loans, LoanStatus %in% c('Chargedoff','Completed')), wilcox.test(BorrowerRate~LoanStatus, alternative="greater"))
 ```
 
-This plot makes it easy to see how borrowers with better credit get a lower APR, and that defaulted or chargedoff loans tend to have a higher rate for the borrower.  This is more obviously apparent when the borrower has a higher credit rating.
+This plot makes it easy to see how borrowers with better credit get different (lower) borrowing rates (P < 2.2e-16), and that chargedoff loans tend to have had a higher rate for the borrower.  This is more obviously apparent when the borrower has a higher credit rating.
 
 ```{r echo=F, Multivariate_5}
 ggplot(aes(x=BorrowerRate, y=EstimatedReturn, color=ProsperRating),
@@ -348,16 +367,18 @@ ggplot(aes(x=BorrowerRate, y=EstimatedReturn, color=ProsperRating),
   scale_y_continuous(breaks=seq(-0.25, 0.25, 0.05))
 ```
 
-The Prosper Rating (or related variables) definitely seems to account for a large part of the difference here.  Possibly due to a higher estimated chance of the loan defaulting, or different loan amounts or terms.
+The Prosper Rating (or related variables) definitely seems to account for part of the pattern seen here.  Possibly due to a higher estimated chance of the loan defaulting, or different loan amounts or terms.
 
 ```{r echo=F, Multivariate_6}
 ggplot(aes(x=MonthlyLoanPayment, y=ProfitFraction),
        data=filter(loans, LoanStatus %in% c('Chargedoff','Defaulted','Completed')))+
   geom_point(alpha=1/10)+
   facet_wrap(~IncomeRange)
+
+cor.test(loans$MonthlyLoanPayment, loans$ProfitFraction)
 ```
 
-Interestingly, if the monthly loan payment was higher the loan was much more likely to be profitable (despite default/chargeoff).  The same relationship is seen as the lender income increases.
+There is a weak negative correlation (-.262) between high monthly loan payments and overall profitability.  Interestingly, among the small number of loans with monthly loan payments above some level (approximately $1200) there were very few unprofitable loans.  The same relationship is seen across lender incomes.
 
 # Multivariate Analysis
 ### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
@@ -366,7 +387,7 @@ The first plot here seemed to show a very clear relationship.  If we can look at
 
 ### Were there any interesting or surprising interactions between features?
 
-I was surprised that a higher monthly loan tends to result in a more profitable loan.  I would have expected that a higher monthly payment would have a greater risk of default.
+I was surprised that loans with a high enough monthly loan tend to result in a more profitable loan.  I would have expected that a higher monthly payment would have a greater risk of default.
 
 ### OPTIONAL: Did you create any models with your dataset? Discuss the strengths and limitations of your model.
 
@@ -377,53 +398,37 @@ A model would be difficult to create with this dataset, since the data has chang
 # Final Plots and Summary
 
 ### Plot One
-```{r echo=FALSE, fig.height=14, Plot_One}
-#Before 2009
-p1 <- ggplot(aes(x=ProfitFraction, fill=LoanStatus),
+```{r echo=FALSE, fig.height=8, fig.width=8, Plot_One}
+ggplot(aes(x=merged_rating, y=LoanStatus, color=ProfitFraction),
              data=filter(loans,
-                         ListingCreationDate < ymd('2009-01-01'),
-                         LoanStatus %in% c('Chargedoff','Defaulted','Current','Completed')))+
-  geom_histogram(position='stack', binwidth=0.01)+
-  facet_wrap(~CreditGrade, scales='free_y', ncol=3)+
-  scale_x_continuous(breaks=seq(-1.5, 1.5, 0.5))+
-  ggtitle('Loans Prior to 2009')+
-  xlab('Profit Fraction')+
-  ylab('Number of Loans')+
-  theme(legend.position='bottom', legend.direction='horizontal')
-
-#After July 2009
-p2 <- ggplot(aes(x=ProfitFraction, fill=LoanStatus),
-             data=filter(loans,
-                         ListingCreationDate >= ymd('2009-07-01'),
-                         LoanStatus %in% c('Chargedoff','Defaulted','Current','Completed')))+
-  geom_histogram(position='stack', binwidth=0.01)+
-  facet_wrap(~ProsperRating, scales='free_y', ncol=3)+
-  scale_x_continuous(breaks=seq(-1.5, 1.5, 0.5))+
-  ggtitle('Loans after July 2009')+
-  xlab('Profit Fraction')+
-  ylab('Number of Loans')+
-  theme(legend.position='bottom', legend.direction='horizontal')
-
-grid.arrange(p1, p2, ncol=1,
-             top='Credit Rating, Profit, and Loan Status')
+                         LoanStatus %in% c('Chargedoff','Defaulted','Current','Completed'),
+                         !(merged_rating %in% c('','NC'))))+
+  geom_jitter()+
+  scale_color_gradient2()+
+  ggtitle('Profit from Loans')+
+  xlab('Loan Rating')+
+  ylab('Current Status')
 ```
 
 ### Description One
-This plot is divided into two sections based on the date of loan origination because the credit rating system changed in those two time periods.  The older loans are all complete, while the more recent loans on the right also include current loans.  Amongst the different credit ratings (increasing from left to right and top to bottom) the profit fraction for any given loan is smaller, but the number of loans with a loss (negative profit fraction) also decreases.  The profit fraction is the total payments made by the borrower minus any fees paid by the lender.  This very clearly shows the risk-reward relationship.  It's also interesting to see that even loans in default may be profitable overall.
+This plot describes the profit that has been made (or is being made) on loans relative to their status and rating.  Equal ratings for the old and the new system are being grouped together.  The profit fraction is the total payments made by the borrower minus any fees paid by the lender.  There are several interesting observations:
+* Lower-rated loans have a greater potential for profit when they are completed (higher profit fraction than higher-rated completed loans), but are also riskier since a higher proportion end up as chargedoff or defaulted, which almost always results in a loss.
+* Higher-rated loans are generally not profitable until they are completed, while lower-rated loans more often return a profit while still current and may even return a profit after being chargedoff.
+* Some loans have a profit fraction below -1, indicating a loss of principle and additional fees for unsucessful collection.
 
 ### Plot Two
 ```{r echo=FALSE, fig.width=12, fig.height=8, Plot_Two}
-ggplot(aes(x=ListingCreationDate, fill=Term),
+ggplot(aes(x=ListingCreationDate, fill=ListingCategory),
        data=loans)+
-  geom_histogram(binwidth=60*60*24*7)+ #weekly
-  facet_wrap(~ListingCategory, scales='free_y', ncol=6)+
+  geom_histogram(binwidth=60*60*24*7*4, position='fill')+ #4 week periods
+  facet_wrap(~Term, ncol=1)+
   ggtitle('Types of Loans')+
   xlab('Listing Creation Date')+
-  ylab('Number of Loans')
+  ylab('Frequency of Loan Type')
 ```
 
 ### Description Two
-This plot shows a concise view of the kinds of loans that are listed on Prosper.  It's important to see that the listing categories and available loan terms have changed over time.  Many of these have only been available recently (starting in 2012).  By far Debt Consolidation is the most popular listing category, and 36-months is the most popular loan term.
+This plot shows a concise view of the kinds of loans that are listed on Prosper.  It's important to see that the listing categories and available loan terms have changed over time.  Initially the website only offered 36-month uncategorized loans.  Around 2011 they began offering 12 and 60 month loans, but seem to have later discontinued 12-month loans.  Starting around 2012 the number of different listing categories was greatly expanded, but Debt Consolidation remained the most popular listing category and even increased in popularity- up to about 75% of loans in the most recent 4-week period were listed in this category.  
 
 ### Plot Three
 ```{r echo=FALSE, Plot_Three}
@@ -445,6 +450,6 @@ This plot only examines completed loans.  It shows the relationship between the 
 
 I did a lot of cleaning and organizing of the data before starting analysis.  This was helpful for understanding the different variables even if I didn't use all of them.  I expected to see some tradeoff between risk and reward and certainly several of the plots showed this in different ways.  However, it is difficult to simplify this relationship down to just a few variables.
 
-The dataset was quite complex not only due to the large number of variables, but also because these variables changed over time.  The entire Prosper system was shut down and restarted in 2009.  This also involved a change in the credit rating variable ('CreditRating' vs 'ProsperRating') and policies (minimum loan amount, credit requirements, etc).  The listing categories changed at multiple points in time also.  However, I was able to get around some of these difficulties by dividing the dataset and making multiple plots.  Additional data on the exiting current loans would be helpful.  Many of the loans in the dataset are too new to draw judgements on since they are still current and may or may not end up in default.
+The dataset was quite complex not only due to the large number of variables, but also because these variables changed over time.  The entire Prosper system was shut down and restarted in 2009.  This also involved a change in the credit rating variable ('CreditRating' vs 'ProsperRating') and policies (minimum loan amount, credit requirements, etc).  The listing categories changed at multiple points in time also.  However, I was able to get around some of these difficulties by creating new variables.  Additional data on the exiting current loans would be helpful.  Many of the loans in the dataset are too new to draw judgements on since they are still current and may or may not end up in default.
 
 If I were to further explore this dataset I could investigate several different additional groups of variables such as the many variables that involve the borrower's credit rating, the data on borrowers' other Prosper Loans, the invovlement of friends in the investment, and the group identities.
